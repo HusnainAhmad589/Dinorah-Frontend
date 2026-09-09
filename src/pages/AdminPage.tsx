@@ -19,6 +19,11 @@ import {
   deleteCategory,
 } from "../services/product.service";
 import {
+  fetchAdminOrders,
+  updateAdminOrderStatus,
+} from "../services/order.service";
+import { Order, OrderStatus } from "../types/order.types";
+import {
   OverviewInsights,
   SalesInsight,
   OrderInsights,
@@ -61,6 +66,7 @@ import {
   RefreshOutlined,
   WarningAmberOutlined,
   CheckCircleOutlined,
+  CloseOutlined,
 } from "@mui/icons-material";
 import {
   CircularProgress,
@@ -102,6 +108,13 @@ export const AdminPage: React.FC = () => {
   // Catalog Management State
   const [productsList, setProductsList] = useState<Product[]>([]);
   const [categoriesList, setCategoriesList] = useState<Category[]>([]);
+
+  // Order Management State (Sprint 4)
+  const [adminOrders, setAdminOrders] = useState<Order[]>([]);
+  const [adminOrdersFilter, setAdminOrdersFilter] = useState<string>("all");
+  const [selectedAdminOrder, setSelectedAdminOrder] = useState<Order | null>(null);
+  const [adminOrderModalOpen, setAdminOrderModalOpen] = useState(false);
+  const [statusUpdatingId, setStatusUpdatingId] = useState<number | null>(null);
 
   // Product Modal State
   const [productModalOpen, setProductModalOpen] = useState(false);
@@ -152,6 +165,7 @@ export const AdminPage: React.FC = () => {
         prodViewsRes,
         productsRes,
         categoriesRes,
+        ordersListRes,
       ] = await Promise.all([
         fetchOverviewInsights(),
         fetchSalesInsights(salesPeriod),
@@ -161,6 +175,7 @@ export const AdminPage: React.FC = () => {
         fetchProductViews(),
         fetchProducts({ active: false }),
         fetchCategories(),
+        fetchAdminOrders(),
       ]);
 
       setOverview(overviewRes);
@@ -171,6 +186,7 @@ export const AdminPage: React.FC = () => {
       setProductViewers(prodViewsRes);
       setProductsList(productsRes);
       setCategoriesList(categoriesRes);
+      setAdminOrders(ordersListRes);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Failed to load admin analytics.");
     } finally {
@@ -178,6 +194,38 @@ export const AdminPage: React.FC = () => {
       setRefreshing(false);
     }
   }, [salesPeriod]);
+
+  // Handle Admin Order Filter change
+  const handleFilterAdminOrders = async (filter: string) => {
+    setAdminOrdersFilter(filter);
+    try {
+      const orders = await fetchAdminOrders(filter);
+      setAdminOrders(orders);
+    } catch (err: any) {
+      setError(err.message || "Failed to filter orders");
+    }
+  };
+
+  // Handle Admin Order Status Update
+  const handleAdminStatusChange = async (orderId: number, newStatus: OrderStatus) => {
+    try {
+      setStatusUpdatingId(orderId);
+      const updated = await updateAdminOrderStatus(orderId, newStatus);
+      setAdminOrders((prev) => prev.map((ord) => (ord.id === orderId ? updated : ord)));
+      if (selectedAdminOrder && selectedAdminOrder.id === orderId) {
+        setSelectedAdminOrder(updated);
+      }
+      setSuccessMessage(`Order #DIN-${orderId.toString().padStart(5, "0")} status updated to ${newStatus}`);
+      // Refresh insights quietly
+      fetchOrderInsights().then(setOrderStats).catch(() => {});
+      fetchOverviewInsights().then(setOverview).catch(() => {});
+      setTimeout(() => setSuccessMessage(null), 4000);
+    } catch (err: any) {
+      setError(err.message || "Failed to update order status");
+    } finally {
+      setStatusUpdatingId(null);
+    }
+  };
 
   useEffect(() => {
     loadAllData();
@@ -775,6 +823,171 @@ export const AdminPage: React.FC = () => {
                     </ResponsiveContainer>
                   </div>
                 </div>
+
+                {/* ========================================================================= */}
+                {/* ADMIN ORDERS MANAGEMENT TABLE (Sprint 4) */}
+                {/* ========================================================================= */}
+                <div style={{ backgroundColor: "#FCFAF8", border: "1px solid #E8E1D8", borderRadius: "18px", padding: "26px", boxShadow: "0 4px 20px rgba(43,33,29,0.03)" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "16px", marginBottom: "20px" }}>
+                    <div>
+                      <h3 style={{ fontFamily: "'Cormorant Garamond', Georgia, serif", fontSize: "24px", margin: 0, color: "#2B211D" }}>
+                        Client Orders & Fulfillment Directory ({adminOrders.length})
+                      </h3>
+                      <p style={{ fontSize: "12.5px", color: "#81766E", margin: "4px 0 0 0" }}>
+                        Inspect order dossiers, verify Cash on Delivery parameters, and update fulfillment tracking.
+                      </p>
+                    </div>
+
+                    {/* Status Filter Buttons */}
+                    <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+                      {["all", "pending", "confirmed", "shipped", "delivered", "cancelled"].map((filterKey) => (
+                        <button
+                          key={filterKey}
+                          onClick={() => handleFilterAdminOrders(filterKey)}
+                          style={{
+                            padding: "6px 14px",
+                            borderRadius: "9999px",
+                            border: adminOrdersFilter === filterKey ? "1px solid #2B211D" : "1px solid #EAE2D7",
+                            backgroundColor: adminOrdersFilter === filterKey ? "#2B211D" : "#FFFFFF",
+                            color: adminOrdersFilter === filterKey ? "#F8F5F0" : "#61564F",
+                            fontSize: "11px",
+                            fontWeight: 600,
+                            letterSpacing: "0.1em",
+                            textTransform: "uppercase",
+                            cursor: "pointer",
+                            transition: "all 0.2s ease",
+                          }}
+                        >
+                          {filterKey}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Orders Table */}
+                  <div style={{ overflowX: "auto" }}>
+                    <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "13px" }}>
+                      <thead>
+                        <tr style={{ borderBottom: "2px solid #EAE2D7", textAlign: "left", color: "#81766E" }}>
+                          <th style={{ padding: "12px 14px", fontWeight: 600, textTransform: "uppercase", fontSize: "11px", letterSpacing: "0.1em" }}>Order #</th>
+                          <th style={{ padding: "12px 14px", fontWeight: 600, textTransform: "uppercase", fontSize: "11px", letterSpacing: "0.1em" }}>Date</th>
+                          <th style={{ padding: "12px 14px", fontWeight: 600, textTransform: "uppercase", fontSize: "11px", letterSpacing: "0.1em" }}>Customer</th>
+                          <th style={{ padding: "12px 14px", fontWeight: 600, textTransform: "uppercase", fontSize: "11px", letterSpacing: "0.1em" }}>Destination</th>
+                          <th style={{ padding: "12px 14px", fontWeight: 600, textTransform: "uppercase", fontSize: "11px", letterSpacing: "0.1em" }}>Pieces</th>
+                          <th style={{ padding: "12px 14px", fontWeight: 600, textTransform: "uppercase", fontSize: "11px", letterSpacing: "0.1em" }}>Total Payable</th>
+                          <th style={{ padding: "12px 14px", fontWeight: 600, textTransform: "uppercase", fontSize: "11px", letterSpacing: "0.1em" }}>Status</th>
+                          <th style={{ padding: "12px 14px", fontWeight: 600, textTransform: "uppercase", fontSize: "11px", letterSpacing: "0.1em" }}>Update Status</th>
+                          <th style={{ padding: "12px 14px", fontWeight: 600, textTransform: "uppercase", fontSize: "11px", letterSpacing: "0.1em", textAlign: "center" }}>Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {adminOrders.length === 0 ? (
+                          <tr>
+                            <td colSpan={9} style={{ padding: "32px", textAlign: "center", color: "#81766E" }}>
+                              No orders found matching the filter "{adminOrdersFilter}".
+                            </td>
+                          </tr>
+                        ) : (
+                          adminOrders.map((ord) => (
+                            <tr
+                              key={ord.id}
+                              style={{
+                                borderBottom: "1px solid #EFEAE3",
+                                transition: "background-color 0.2s",
+                              }}
+                            >
+                              <td style={{ padding: "14px", fontWeight: 600, color: "#2B211D" }}>
+                                #DIN-{ord.id.toString().padStart(5, "0")}
+                              </td>
+                              <td style={{ padding: "14px", color: "#81766E", whiteSpace: "nowrap" }}>
+                                {new Date(ord.createdAt).toLocaleDateString()}
+                              </td>
+                              <td style={{ padding: "14px" }}>
+                                <div style={{ fontWeight: 500, color: "#2B211D" }}>{ord.customerName || "Customer"}</div>
+                                <div style={{ fontSize: "11.5px", color: "#81766E" }}>{ord.customerEmail}</div>
+                              </td>
+                              <td style={{ padding: "14px", color: "#61564F" }}>
+                                {ord.city || "Direct Courier"}
+                              </td>
+                              <td style={{ padding: "14px", color: "#2B211D", fontWeight: 500 }}>
+                                {ord.itemCount || (ord.items ? ord.items.reduce((s, i) => s + i.quantity, 0) : 0)} pc(s)
+                              </td>
+                              <td style={{ padding: "14px", fontWeight: 600, color: "#2B211D", whiteSpace: "nowrap" }}>
+                                ${ord.totalAmount.toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                              </td>
+                              <td style={{ padding: "14px" }}>
+                                <span
+                                  style={{
+                                    display: "inline-block",
+                                    padding: "3px 10px",
+                                    borderRadius: "9999px",
+                                    fontSize: "11px",
+                                    fontWeight: 600,
+                                    textTransform: "uppercase",
+                                    letterSpacing: "0.08em",
+                                    backgroundColor:
+                                      ord.status === "delivered" ? "#E8F5E9" :
+                                      ord.status === "shipped" ? "#EDE7F6" :
+                                      ord.status === "confirmed" ? "#E3F2FD" :
+                                      ord.status === "cancelled" ? "#FFEBEE" : "#FFF8E1",
+                                    color:
+                                      ord.status === "delivered" ? "#2E7D32" :
+                                      ord.status === "shipped" ? "#5E35B1" :
+                                      ord.status === "confirmed" ? "#1565C0" :
+                                      ord.status === "cancelled" ? "#C62828" : "#B78103",
+                                  }}
+                                >
+                                  {ord.status}
+                                </span>
+                              </td>
+                              <td style={{ padding: "14px" }}>
+                                <Select
+                                  size="small"
+                                  value={ord.status}
+                                  disabled={statusUpdatingId === ord.id}
+                                  onChange={(e) => handleAdminStatusChange(ord.id, e.target.value as OrderStatus)}
+                                  sx={{
+                                    fontSize: "12px",
+                                    height: "32px",
+                                    borderRadius: "8px",
+                                    backgroundColor: "#FFFFFF",
+                                  }}
+                                >
+                                  <MenuItem value="pending">Pending</MenuItem>
+                                  <MenuItem value="confirmed">Confirmed</MenuItem>
+                                  <MenuItem value="shipped">Shipped</MenuItem>
+                                  <MenuItem value="delivered">Delivered</MenuItem>
+                                  <MenuItem value="cancelled">Cancelled</MenuItem>
+                                </Select>
+                              </td>
+                              <td style={{ padding: "14px", textAlign: "center" }}>
+                                <button
+                                  onClick={() => {
+                                    setSelectedAdminOrder(ord);
+                                    setAdminOrderModalOpen(true);
+                                  }}
+                                  style={{
+                                    padding: "6px 14px",
+                                    borderRadius: "9999px",
+                                    border: "1px solid #D5CBC0",
+                                    backgroundColor: "#FFFFFF",
+                                    color: "#2B211D",
+                                    fontSize: "11.5px",
+                                    fontWeight: 600,
+                                    cursor: "pointer",
+                                    whiteSpace: "nowrap",
+                                  }}
+                                >
+                                  View Dossier
+                                </button>
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
               </div>
             )}
 
@@ -1289,6 +1502,208 @@ export const AdminPage: React.FC = () => {
                 Delete Permanently
               </button>
             </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* ========================================================================= */}
+        {/* ADMIN ORDER DOSSIER DIALOG (Sprint 4) */}
+        {/* ========================================================================= */}
+        <Dialog
+          open={adminOrderModalOpen}
+          onClose={() => setAdminOrderModalOpen(false)}
+          maxWidth="md"
+          fullWidth
+          slotProps={{
+            paper: {
+              sx: {
+                borderRadius: "20px",
+                padding: "12px",
+                backgroundColor: "#FCFAF8",
+              },
+            },
+          }}
+        >
+          <DialogTitle
+            sx={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              borderBottom: "1px solid #EAE2D7",
+              pb: 2,
+            }}
+          >
+            <div>
+              <span
+                style={{
+                  fontSize: "11px",
+                  letterSpacing: "0.2em",
+                  textTransform: "uppercase",
+                  color: "#B4935A",
+                  fontWeight: 600,
+                  display: "block",
+                }}
+              >
+                Atelier Fulfillment Dossier
+              </span>
+              <span style={{ fontFamily: "'Cormorant Garamond', Georgia, serif", fontSize: "24px", color: "#2B211D", fontWeight: 600 }}>
+                Order #DIN-{selectedAdminOrder?.id.toString().padStart(5, "0")}
+              </span>
+            </div>
+            <IconButton onClick={() => setAdminOrderModalOpen(false)} size="small">
+              <CloseOutlined />
+            </IconButton>
+          </DialogTitle>
+
+          <DialogContent sx={{ pt: 3 }}>
+            {selectedAdminOrder && (
+              <div style={{ display: "flex", flexDirection: "column", gap: "22px" }}>
+                {/* Status & Update Action Header */}
+                <div
+                  style={{
+                    backgroundColor: "#FFFFFF",
+                    border: "1px solid #EAE2D7",
+                    borderRadius: "14px",
+                    padding: "16px 20px",
+                    display: "flex",
+                    flexWrap: "wrap",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    gap: "14px",
+                  }}
+                >
+                  <div>
+                    <div style={{ fontSize: "11px", color: "#81766E", textTransform: "uppercase", letterSpacing: "0.1em" }}>
+                      Fulfillment Status
+                    </div>
+                    <div style={{ marginTop: "6px", display: "flex", alignItems: "center", gap: "10px" }}>
+                      <Select
+                        size="small"
+                        value={selectedAdminOrder.status}
+                        disabled={statusUpdatingId === selectedAdminOrder.id}
+                        onChange={(e) => handleAdminStatusChange(selectedAdminOrder.id, e.target.value as OrderStatus)}
+                        sx={{ fontSize: "13px", height: "36px", minWidth: "140px", backgroundColor: "#FCFAF8" }}
+                      >
+                        <MenuItem value="pending">Pending</MenuItem>
+                        <MenuItem value="confirmed">Confirmed</MenuItem>
+                        <MenuItem value="shipped">Shipped</MenuItem>
+                        <MenuItem value="delivered">Delivered</MenuItem>
+                        <MenuItem value="cancelled">Cancelled</MenuItem>
+                      </Select>
+                      {statusUpdatingId === selectedAdminOrder.id && (
+                        <CircularProgress size={16} sx={{ color: "#B4935A" }} />
+                      )}
+                    </div>
+                  </div>
+
+                  <div>
+                    <div style={{ fontSize: "11px", color: "#81766E", textTransform: "uppercase", letterSpacing: "0.1em" }}>
+                      Payment Method
+                    </div>
+                    <div style={{ fontSize: "14px", fontWeight: 600, color: "#2B211D", marginTop: "4px" }}>
+                      Cash on Delivery (Armored Courier)
+                    </div>
+                  </div>
+
+                  <div>
+                    <div style={{ fontSize: "11px", color: "#81766E", textTransform: "uppercase", letterSpacing: "0.1em" }}>
+                      Order Total
+                    </div>
+                    <div
+                      style={{
+                        fontFamily: "'Cormorant Garamond', Georgia, serif",
+                        fontSize: "26px",
+                        fontWeight: 600,
+                        color: "#2B211D",
+                      }}
+                    >
+                      ${selectedAdminOrder.totalAmount.toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Customer & Shipping Cards */}
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
+                    gap: "16px",
+                  }}
+                >
+                  <div style={{ backgroundColor: "#FFFFFF", border: "1px solid #EAE2D7", borderRadius: "14px", padding: "18px" }}>
+                    <div style={{ fontSize: "11px", color: "#81766E", textTransform: "uppercase", letterSpacing: "0.1em", fontWeight: 600 }}>
+                      Client & Recipient
+                    </div>
+                    <div style={{ fontSize: "14.5px", fontWeight: 600, color: "#2B211D", marginTop: "6px" }}>
+                      {selectedAdminOrder.customerName}
+                    </div>
+                    <div style={{ fontSize: "13px", color: "#61564F", marginTop: "2px" }}>
+                      {selectedAdminOrder.customerEmail}
+                    </div>
+                    <div style={{ fontSize: "13px", color: "#61564F", marginTop: "2px" }}>
+                      Phone: <strong>{selectedAdminOrder.customerPhone || "Not provided"}</strong>
+                    </div>
+                  </div>
+
+                  <div style={{ backgroundColor: "#FFFFFF", border: "1px solid #EAE2D7", borderRadius: "14px", padding: "18px" }}>
+                    <div style={{ fontSize: "11px", color: "#81766E", textTransform: "uppercase", letterSpacing: "0.1em", fontWeight: 600 }}>
+                      Delivery Destination
+                    </div>
+                    <div style={{ fontSize: "14px", color: "#2B211D", marginTop: "6px" }}>
+                      {selectedAdminOrder.shippingAddress}
+                    </div>
+                    <div style={{ fontSize: "13px", color: "#61564F", marginTop: "2px" }}>
+                      {selectedAdminOrder.city} {selectedAdminOrder.postalCode}
+                    </div>
+                    <div style={{ fontSize: "12px", color: "#2E7D32", fontWeight: 600, marginTop: "4px" }}>
+                      White-Glove Armored Courier
+                    </div>
+                  </div>
+                </div>
+
+                {/* Ordered Items List */}
+                <div>
+                  <h4 style={{ fontFamily: "'Cormorant Garamond', Georgia, serif", fontSize: "20px", color: "#2B211D", margin: "0 0 10px 0" }}>
+                    Reserved Pieces ({selectedAdminOrder.items?.length || 0})
+                  </h4>
+                  <div style={{ border: "1px solid #EAE2D7", borderRadius: "14px", overflow: "hidden", backgroundColor: "#FFFFFF" }}>
+                    {(selectedAdminOrder.items || []).map((item, idx) => (
+                      <div
+                        key={item.id}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "14px",
+                          padding: "14px 18px",
+                          borderBottom: idx < (selectedAdminOrder.items?.length || 0) - 1 ? "1px solid #EFEAE3" : "none",
+                        }}
+                      >
+                        {item.productImage && (
+                          <img
+                            src={item.productImage}
+                            alt={item.productName}
+                            style={{ width: "48px", height: "48px", objectFit: "cover", borderRadius: "8px", border: "1px solid #EAE2D7" }}
+                          />
+                        )}
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontSize: "13.5px", fontWeight: 600, color: "#2B211D" }}>
+                            {item.productName}
+                          </div>
+                          <div style={{ fontSize: "12px", color: "#81766E", marginTop: "2px" }}>
+                            Unit Price: ${item.unitPrice.toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                          </div>
+                        </div>
+                        <div style={{ textAlign: "right" }}>
+                          <div style={{ fontSize: "12px", color: "#81766E" }}>Qty: {item.quantity}</div>
+                          <div style={{ fontSize: "14px", fontWeight: 600, color: "#2B211D", marginTop: "2px" }}>
+                            ${item.subtotal?.toLocaleString("en-US", { minimumFractionDigits: 2 }) || (item.quantity * item.unitPrice).toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
           </DialogContent>
         </Dialog>
       </div>

@@ -13,7 +13,7 @@ import {
 } from "@mui/material";
 import { CartBadge } from "./cart/CartBadge";
 
-export type NavTab = "home" | "products" | "login" | "register" | "admin" | "cart";
+export type NavTab = "home" | "products" | "login" | "register" | "admin" | "cart" | "orders";
 
 interface NavbarProps {
   currentTab: NavTab;
@@ -135,6 +135,17 @@ export const Navbar: React.FC<NavbarProps> = ({
             </div>
           ) : (
             <div className="flex items-center gap-4 ml-4">
+              <button
+                className="nav-link"
+                onClick={() => onSelectTab("orders")}
+                style={{
+                  color: currentTab === "orders" ? "var(--gold)" : "var(--muted)",
+                  fontWeight: currentTab === "orders" ? 600 : 400,
+                }}
+              >
+                Orders
+              </button>
+
               {user.role === "admin" && (
                 <button
                   className="nav-link"
@@ -346,6 +357,16 @@ export const Navbar: React.FC<NavbarProps> = ({
                 }}
               >
                 Browse Catalog
+              </button>
+
+              <button
+                className="button text-center w-full"
+                onClick={() => {
+                  onSelectTab("orders");
+                  setMobileMenuOpen(false);
+                }}
+              >
+                My Orders
               </button>
 
               {user.role === "admin" && (

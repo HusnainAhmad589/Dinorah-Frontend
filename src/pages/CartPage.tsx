@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAppSelector, useAppDispatch } from "../store/store";
 import { clearCustomerCart } from "../store/slices/cartSlice";
@@ -8,8 +8,9 @@ import {
   ArrowBackOutlined,
   DeleteSweepOutlined,
   DiamondOutlined,
+  WarningAmberOutlined,
 } from "@mui/icons-material";
-import { Alert } from "@mui/material";
+import { Alert, Dialog, DialogContent } from "@mui/material";
 
 export const CartPage: React.FC = () => {
   const navigate = useNavigate();
@@ -19,10 +20,13 @@ export const CartPage: React.FC = () => {
   const totalQuantity = useAppSelector((state) => state.cart.totalQuantity);
   const error = useAppSelector((state) => state.cart.error);
 
-  const handleClearCart = () => {
-    if (window.confirm("Are you sure you wish to clear all pieces from your shopping bag?")) {
-      dispatch(clearCustomerCart());
-    }
+  const [clearModalOpen, setClearModalOpen] = useState(false);
+
+  const handleClearCart = () => setClearModalOpen(true);
+
+  const confirmClear = () => {
+    dispatch(clearCustomerCart());
+    setClearModalOpen(false);
   };
 
   return (
@@ -251,6 +255,140 @@ export const CartPage: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* ── Clear Selection Confirmation Modal ── */}
+      <Dialog
+        open={clearModalOpen}
+        onClose={() => setClearModalOpen(false)}
+        maxWidth="xs"
+        fullWidth
+        slotProps={{
+          paper: {
+            sx: {
+              borderRadius: "20px",
+              backgroundColor: "#FCFAF8",
+              boxShadow: "0 24px 60px rgba(43,33,29,0.18)",
+              overflow: "hidden",
+            },
+          },
+        }}
+      >
+        <DialogContent sx={{ p: 0 }}>
+          {/* Top accent bar */}
+          <div
+            style={{
+              height: "4px",
+              background: "linear-gradient(90deg, #B4935A, #D4AF72)",
+            }}
+          />
+
+          <div style={{ padding: "32px 28px 28px" }}>
+            {/* Icon */}
+            <div
+              style={{
+                width: "52px",
+                height: "52px",
+                borderRadius: "50%",
+                backgroundColor: "#FFF3E0",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                margin: "0 auto 20px auto",
+              }}
+            >
+              <WarningAmberOutlined sx={{ fontSize: 28, color: "#E65100" }} />
+            </div>
+
+            {/* Title */}
+            <h2
+              style={{
+                fontFamily: "'Cormorant Garamond', Georgia, serif",
+                fontSize: "24px",
+                color: "#2B211D",
+                margin: "0 0 10px 0",
+                textAlign: "center",
+                fontWeight: 500,
+              }}
+            >
+              Clear Your Selection?
+            </h2>
+
+            {/* Body */}
+            <p
+              style={{
+                fontSize: "13px",
+                color: "#81766E",
+                textAlign: "center",
+                lineHeight: 1.65,
+                margin: "0 0 28px 0",
+              }}
+            >
+              This will remove all{" "}
+              <strong style={{ color: "#2B211D" }}>
+                {totalQuantity} {totalQuantity === 1 ? "piece" : "pieces"}
+              </strong>{" "}
+              from your shopping bag. This action cannot be undone.
+            </p>
+
+            {/* Actions */}
+            <div style={{ display: "flex", gap: "10px" }}>
+              <button
+                onClick={() => setClearModalOpen(false)}
+                style={{
+                  flex: 1,
+                  padding: "12px",
+                  borderRadius: "9999px",
+                  border: "1px solid #D5CBC0",
+                  backgroundColor: "transparent",
+                  fontSize: "11px",
+                  fontWeight: 600,
+                  letterSpacing: "0.16em",
+                  textTransform: "uppercase",
+                  color: "#2B211D",
+                  cursor: "pointer",
+                  transition: "all 0.2s ease",
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = "#F2EDE6";
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = "transparent";
+                }}
+              >
+                Keep Items
+              </button>
+              <button
+                onClick={confirmClear}
+                style={{
+                  flex: 1,
+                  padding: "12px",
+                  borderRadius: "9999px",
+                  border: "none",
+                  backgroundColor: "#C62828",
+                  fontSize: "11px",
+                  fontWeight: 600,
+                  letterSpacing: "0.16em",
+                  textTransform: "uppercase",
+                  color: "#FFFFFF",
+                  cursor: "pointer",
+                  boxShadow: "0 4px 14px rgba(198,40,40,0.25)",
+                  transition: "all 0.2s ease",
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = "#B71C1C";
+                  e.currentTarget.style.transform = "translateY(-1px)";
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = "#C62828";
+                  e.currentTarget.style.transform = "translateY(0)";
+                }}
+              >
+                Yes, Clear All
+              </button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
