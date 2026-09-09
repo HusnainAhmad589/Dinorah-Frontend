@@ -15,6 +15,8 @@ import { CartPage } from "./pages/CartPage";
 import { Login } from "./pages/Login";
 import { Register } from "./pages/Register";
 import { AdminPage } from "./pages/AdminPage";
+import { CheckoutPage } from "./pages/CheckoutPage";
+import { OrdersPage } from "./pages/OrdersPage";
 import { ProtectedRoute } from "./routes/ProtectedRoute";
 import { Footer } from "./components/Footer";
 import { useActivityTracker } from "./hooks/useActivityTracker";
@@ -35,7 +37,8 @@ const AppContent: React.FC = () => {
     if (path === "/login") return "login";
     if (path === "/register") return "register";
     if (path.startsWith("/products")) return "products";
-    if (path === "/cart") return "cart";
+    if (path === "/cart" || path === "/checkout") return "cart";
+    if (path === "/orders") return "orders";
     if (path === "/admin") return "admin";
     return "home";
   };
@@ -51,6 +54,7 @@ const AppContent: React.FC = () => {
     if (tab === "home") navigate("/");
     else if (tab === "products") navigate("/products");
     else if (tab === "cart") navigate("/cart");
+    else if (tab === "orders") navigate("/orders");
     else if (tab === "login") navigate("/login");
     else if (tab === "register") navigate("/register");
     else if (tab === "admin") navigate("/admin");
@@ -76,6 +80,22 @@ const AppContent: React.FC = () => {
           <Route path="/products" element={<ProductsPage />} />
           <Route path="/products/:id" element={<ProductDetailPage />} />
           <Route path="/cart" element={<CartPage />} />
+          <Route
+            path="/checkout"
+            element={
+              <ProtectedRoute allowedRoles={["customer", "admin"]} onNavigateToLogin={() => handleSelectTab("login")}>
+                <CheckoutPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/orders"
+            element={
+              <ProtectedRoute allowedRoles={["customer", "admin"]} onNavigateToLogin={() => handleSelectTab("login")}>
+                <OrdersPage />
+              </ProtectedRoute>
+            }
+          />
           <Route
             path="/login"
             element={
